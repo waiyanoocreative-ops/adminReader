@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>စာ — Admin Panel (CDN + Auto Cleanup)</title>
+  <link rel="icon" type="image/png" sizes="512x512" href="icon.png" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Playfair+Display:wght@700&display=swap');
+    body { font-family: 'Padauk', sans-serif; background-color: #FAF8F5; color: #1E1916; line-height: 1.7; }
+    .font-serif-display { font-family: 'Playfair Display', 'Padauk', serif; }
+    .tactile-btn { transition: transform 0.12s ease, opacity 0.15s ease; }
+    .tactile-btn:active { transform: scale(0.95); }
+
+    #adminLockScreen {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(250, 248, 245, 0.96);
+      backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.3s ease;
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-16">
+
+  <!-- ================= ADMIN PIN LOCK SCREEN ================= -->
+  <div id="adminLockScreen">
+    <div class="bg-white border border-[#E5DEC9] p-8 rounded-3xl shadow-2xl max-w-sm w-full mx-4 text-center space-y-5">
+      <div class="w-16 h-16 rounded-2xl bg-[#6B141A] text-white flex items-center justify-center font-serif-display font-bold text-3xl mx-auto shadow-lg">စာ</div>
+      <div>
+        <h2 class="font-serif-display font-bold text-xl text-[#1E1916]">Admin ဝင်ရောက်ရန်</h2>
+        <p class="text-xs text-[#786E65] mt-1">စီမံခန့်ခွဲသူများသာ ဝင်ရောက်ခွင့်ရှိပါသည် (Default PIN: 2026)</p>
+      </div>
+      <form onsubmit="verifyAdminPin(event)" class="space-y-4 text-left">
+        <div>
+          <label class="block font-bold text-xs text-[#6B141A] mb-1.5 uppercase tracking-wide">PIN Code ထည့်ပါ</label>
+          <input id="loginPinInput" type="password" required autofocus placeholder="••••" class="w-full px-4 py-3 rounded-xl bg-[#F3EFE6] border border-[#C4B59B] text-center font-mono text-xl tracking-widest focus:outline-none focus:border-[#6B141A] transition" />
+          <p id="loginErrorMsg" class="text-[11px] text-red-600 font-bold mt-1.5 hidden text-center">❌ PIN Code မှားယွင်းနေပါသည်</p>
+        </div>
+        <button type="submit" class="tactile-btn w-full py-3 rounded-xl bg-[#6B141A] text-white font-bold shadow-md hover:bg-[#581015] transition">🔒 Login ဝင်မည်</button>
+      </form>
+    </div>
+  </div>
+  <!-- ================= END LOCK SCREEN ================= -->
+
+  <!-- TOP HEADER -->
+  <header class="sticky top-0 z-30 bg-[#FAF8F5]/95 backdrop-blur-md border-b border-[#E5DEC9] px-4 py-3">
+    <div class="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-[#6B141A] text-white flex items-center justify-center font-serif-display font-bold text-lg shadow-sm">စာ</div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-serif-display font-bold text-lg leading-none text-[#1E1916]">စာ — Admin Panel</h1>
+            <button type="button" onclick="openConfigModal()" id="storageBadgePill" class="px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-600/30 text-[10px] font-bold text-emerald-800 cursor-pointer">
+              🐙 GitHub Storage စစ်ဆေးနေသည်...
+            </button>
+          </div>
+          <p class="text-[11px] text-[#786E65] mt-0.5">⚡ jsDelivr CDN + 🗑️ Auto GitHub Cleanup စနစ်ပါဝင်သည်</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <button type="button" onclick="changeAdminPinPrompt()" class="tactile-btn px-3 py-1.5 rounded-full bg-amber-100 text-amber-900 text-xs font-bold">🔑 PIN ပြောင်းမည်</button>
+        <button type="button" onclick="adminLogout()" class="tactile-btn px-3 py-1.5 rounded-full bg-red-100 text-red-700 text-xs font-bold">🚪 ထွက်မည်</button>
+        <button type="button" onclick="openConfigModal()" class="tactile-btn px-3.5 py-2 rounded-full bg-[#F3EFE6] border border-[#E5DEC9] text-xs font-bold text-[#1E1916] flex items-center gap-1.5 shadow-xs">
+          <span>⚙️</span><span>GitHub Settings</span>
+        </button>
+        <a href="index.html" target="_blank" class="tactile-btn px-4 py-2 rounded-full bg-[#6B141A] text-white text-xs font-bold shadow-sm hover:opacity-95 transition">📖 စာကြည့်တိုက်</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- GITHUB PRIMARY STORAGE CONFIG MODAL -->
+  <div id="configModal" style="display: none;" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs items-center justify-center p-4">
+    <div class="bg-[#FAF8F5] border border-[#E5DEC9] rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-[#E5DEC9] pb-3">
+        <div>
+          <h3 class="font-bold text-base text-[#6B141A]">🐙 GitHub Storage ချိတ်ဆက်မှု</h3>
+          <p class="text-[11px] text-[#786E65]">100MB အထိ PDF များကို Git Blob + CDN ဖြင့် တိုက်ရိုက်တင်ရန်</p>
+        </div>
+        <button type="button" onclick="closeConfigModal()" class="w-8 h-8 rounded-full bg-black/5 flex items-center justify-center text-sm font-bold">✕</button>
+      </div>
+
+      <form onsubmit="saveConfigSettings(event)" class="space-y-3.5 text-xs">
+        <div class="p-3.5 rounded-2xl bg-[#F3EFE6] border-2 border-[#6B141A]/30 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <p class="font-bold text-[#6B141A] uppercase tracking-wider">🐙 GITHUB STORAGE (အဓိက စနစ်)</p>
+            <a href="https://github.com/settings/tokens/new?scopes=repo&description=Sar_Library_Admin" target="_blank" class="px-2 py-0.5 rounded-lg bg-[#6B141A] text-white text-[10px] font-bold">🔑 Token ထုတ်ရန် နှိပ်ပါ</a>
+          </div>
+          <div>
+            <label class="block font-bold mb-1">GitHub Personal Access Token (ghp_...) *</label>
+            <input id="cfgGhToken" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" class="w-full px-3 py-2 rounded-xl bg-white border border-[#E5DEC9] font-mono text-xs focus:outline-none focus:border-[#6B141A]" />
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block font-bold mb-1">GitHub Owner</label>
+              <input id="cfgGhOwner" type="text" value="waiyanoocreative-ops" class="w-full px-3 py-2 rounded-xl bg-white border border-[#E5DEC9] font-mono text-xs" />
+            </div>
+            <div>
+              <label class="block font-bold mb-1">Repository Name</label>
+              <input id="cfgGhRepo" type="text" value="myBooks" class="w-full px-3 py-2 rounded-xl bg-white border border-[#E5DEC9] font-mono text-xs" />
+            </div>
+          </div>
+          <div>
+            <label class="block font-bold mb-1">Branch အမည်</label>
+            <input id="cfgGhBranch" type="text" value="main" class="w-full px-3 py-2 rounded-xl bg-white border border-[#E5DEC9] font-mono text-xs" />
+          </div>
+        </div>
+
+        <div class="p-3.5 rounded-2xl bg-[#F3EFE6] border border-[#E5DEC9] space-y-2.5">
+          <p class="font-bold text-emerald-800 uppercase tracking-wider">⚡ SUPABASE DATABASE (စာရင်းမှတ်တမ်းအတွက်သာ)</p>
+          <div>
+            <label class="block font-bold mb-1">Supabase Project URL</label>
+            <input id="cfgSbUrl" type="url" required class="w-full px-3 py-2 rounded-xl bg-white border border-[#E5DEC9] font-mono text-xs" />
+          </div>
+          <div>
+            <label class="block font-bold mb-1">Supabase Key</label>
+            <input id="cfgSbKey" type="text" required class="w-full px-3 py-2 rounded-xl bg-white border border-[#E5DEC9] font-mono text-xs" />
+          </div>
+        </div>
+
+        <button type="submit" class="tactile-btn w-full py-3 rounded-2xl bg-[#6B141A] text-white font-bold text-xs shadow-md">
+          💾 သိမ်းဆည်းမည်
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <main class="max-w-5xl mx-auto px-4 pt-6 space-y-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- UPLOAD FORM -->
+      <div class="lg:col-span-2 bg-[#F3EFE6] border border-[#E5DEC9] rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#E5DEC9] pb-3">
+          <h2 id="formHeading" class="font-bold text-base text-[#6B141A]">📤 စာအုပ်အသစ် တင်ရန် (Git Blob + jsDelivr CDN)</h2>
+          <button type="button" onclick="resetBookForm()" class="text-xs font-bold text-[#786E65] hover:text-[#1E1916]">အသစ်ပြန်စမည်</button>
+        </div>
+
+        <form id="bookUploadForm" onsubmit="handleBookSubmit(event)" class="space-y-4 text-xs sm:text-sm">
+          <input type="hidden" id="editingBookId" value="" />
+          <input type="hidden" id="existingPdfUrl" value="" />
+          <input type="hidden" id="existingCoverUrl" value="" />
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <label class="flex flex-col items-center justify-center p-4 rounded-2xl border-2 border-dashed border-[#6B141A]/40 bg-white/80 hover:bg-white cursor-pointer transition text-center space-y-1.5">
+              <span class="text-2xl">📄</span>
+              <span class="font-bold text-xs text-[#6B141A]">PDF စာအုပ်ဖိုင် ရွေးရန် *</span>
+              <span id="pdfFileNameLabel" class="text-[11px] text-[#786E65] line-clamp-1">ဖိုင်ရွေးချယ်ထားခြင်း မရှိသေးပါ</span>
+              <input id="pdfFileInput" type="file" accept="application/pdf,.pdf" onchange="onPdfSelected(event)" class="hidden" />
+            </label>
+
+            <label class="flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-[#C4B59B] bg-white/80 hover:bg-white cursor-pointer transition">
+              <div id="coverPreviewBox" class="w-14 h-20 rounded-lg bg-[#E5DEC9] overflow-hidden shrink-0 flex items-center justify-center text-[10px] text-[#786E65] text-center p-1">Cover</div>
+              <div class="space-y-1 min-w-0">
+                <span class="block font-bold text-xs text-[#1E1916]">🖼️ မျက်နှာဖုံးပုံ ရွေးရန်</span>
+                <span class="block text-[10px] text-[#786E65]">မရွေးပါက ပထမစာမျက်နှာကို သုံးပါမည် (⚡ CDN အမြန်စနစ်)</span>
+              </div>
+              <input id="coverFileInput" type="file" accept="image/*" onchange="onCoverSelected(event)" class="hidden" />
+            </label>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div><label class="block font-bold text-xs mb-1">စာအုပ်အမည် *</label><input id="bookTitle" type="text" required class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#E5DEC9] focus:outline-none focus:border-[#6B141A]" /></div>
+            <div><label class="block font-bold text-xs mb-1">စာရေးဆရာအမည် *</label><input id="bookAuthor" type="text" required class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#E5DEC9] focus:outline-none focus:border-[#6B141A]" /></div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <div><label class="block font-bold text-xs mb-1">အမျိုးအစား</label><select id="bookCategory" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#E5DEC9] focus:outline-none focus:border-[#6B141A]"></select></div>
+            <div><label class="block font-bold text-xs mb-1">စာမျက်နှာ</label><input id="bookPages" type="number" min="1" value="1" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#E5DEC9] focus:outline-none focus:border-[#6B141A]" /></div>
+            <div><label class="block font-bold text-xs mb-1">အခြေအနေ</label>
+              <select id="bookStatus" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#E5DEC9] focus:outline-none focus:border-[#6B141A]">
+                <option value="published">Published</option>
+                <option value="draft">Draft</option>
+              </select>
+            </div>
+          </div>
+
+          <div><label class="block font-bold text-xs mb-1">အညွှန်းစာ</label><textarea id="bookDesc" rows="3" class="w-full px-3.5 py-2.5 rounded-xl bg-white border border-[#E5DEC9] focus:outline-none focus:border-[#6B141A]"></textarea></div>
+
+          <!-- UPLOAD PROGRESS -->
+          <div id="uploadStatusBox" class="hidden p-3.5 rounded-2xl bg-amber-50 border border-amber-300 space-y-1.5">
+            <div class="flex justify-between text-xs font-bold text-amber-900">
+              <span id="uploadStepText">Git Blob ဖြင့် ဖိုင်တင်နေပါသည်...</span>
+              <span id="uploadPctText">0%</span>
+            </div>
+            <div class="w-full h-2.5 rounded-full bg-amber-200 overflow-hidden">
+              <div id="uploadProgressBar" class="h-full bg-[#6B141A] transition-all duration-300" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <button type="submit" id="submitBookBtn" class="tactile-btn w-full py-3 rounded-2xl bg-[#6B141A] text-white font-bold text-sm shadow-md hover:opacity-95 transition">
+            💾 စာအုပ် တင်မည်
+          </button>
+        </form>
+      </div>
+
+      <!-- RIGHT UIs -->
+      <div class="space-y-6">
+        <div class="bg-[#F3EFE6] border border-[#E5DEC9] rounded-3xl p-5 shadow-sm space-y-3">
+          <h3 class="font-bold text-sm text-[#6B141A] border-b border-[#E5DEC9] pb-2">🏷️ အမျိုးအစားများ</h3>
+          <form onsubmit="handleAddCategory(event)" class="flex gap-2 text-xs">
+            <input id="newCatInput" type="text" required placeholder="အသစ်..." class="flex-1 px-3 py-2 rounded-xl bg-white border border-[#E5DEC9] focus:outline-none" />
+            <button type="submit" class="tactile-btn px-4 py-2 rounded-xl bg-[#6B141A] text-white font-bold shrink-0">ထည့်မည်</button>
+          </form>
+          <div id="categoriesListBox" class="space-y-1.5 max-h-48 overflow-y-auto pr-1 text-xs"></div>
+        </div>
+
+        <div class="bg-[#F3EFE6] border border-[#E5DEC9] rounded-3xl p-5 shadow-sm space-y-3">
+          <h3 class="font-bold text-sm text-[#6B141A] border-b border-[#E5DEC9] pb-2">📩 တောင်းဆိုမှုများ</h3>
+          <div id="requestsListBox" class="space-y-2 max-h-64 overflow-y-auto pr-1 text-xs"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOOKS LIST -->
+    <div class="bg-[#F3EFE6] border border-[#E5DEC9] rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#E5DEC9] pb-3">
+        <div class="flex items-center gap-2 flex-wrap">
+          <h3 class="font-bold text-base text-[#1E1916]">📚 တင်ထားသော စာအုပ်များ (<span id="booksCountLabel">0</span>)</h3>
+          <button type="button" onclick="upgradeExistingCoversToCdn()" id="cdnUpgradeBtn" class="tactile-btn px-3 py-1 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-900 text-[11px] font-bold" title="လက်ရှိ စာအုပ်ဟောင်းများ၏ မျက်နှာဖုံးပုံများကို ၃ ဆ ပိုမြန်သော jsDelivr CDN သို့ ပြောင်းပေးမည်">
+            ⚡ ပုံများ CDN ပြောင်းမည်
+          </button>
+        </div>
+        <input id="searchBooksInput" type="text" oninput="renderBooksList()" placeholder="ရှာရန်..." class="px-3.5 py-1.5 rounded-full bg-white border border-[#E5DEC9] text-xs focus:outline-none" />
+      </div>
+      <div id="booksListBox" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+    </div>
+
+    <!-- REVIEWS -->
+    <div class="bg-[#F3EFE6] border border-[#E5DEC9] rounded-3xl p-5 sm:p-6 shadow-sm space-y-3">
+      <div class="flex items-center justify-between border-b border-[#E5DEC9] pb-2">
+        <h3 class="font-bold text-sm text-[#6B141A]">⭐ မှတ်ချက်များ</h3>
+        <span id="reviewsCountBadge" class="text-xs font-bold text-[#786E65]">0 မှတ်ချက်</span>
+      </div>
+      <div id="reviewsListBox" class="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-60 overflow-y-auto pr-1 text-xs"></div>
+    </div>
+
+    <!-- ADS & VIP -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="bg-[#F3EFE6] border border-[#E5DEC9] rounded-3xl p-5 shadow-sm space-y-3">
+        <h3 class="font-bold text-sm text-[#6B141A] border-b border-[#E5DEC9] pb-2">📢 ကြော်ငြာများ (Ads)</h3>
+        <form onsubmit="handleAddSponsorAd(event)" class="space-y-2.5 text-xs">
+          <input id="adTitle" type="text" required placeholder="ခေါင်းစဉ်" class="w-full px-3 py-2 rounded-xl bg-white border border-[#E5DEC9]" />
+          <input id="adImageFile" type="file" accept="image/*" class="w-full text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-[#6B141A] file:text-white file:font-bold cursor-pointer" />
+          <input id="adTargetUrl" type="url" required placeholder="Link URL" class="w-full px-3 py-2 rounded-xl bg-white border border-[#E5DEC9]" />
+          <button type="submit" id="adSubmitBtn" class="tactile-btn w-full py-2.5 rounded-xl bg-[#6B141A] text-white font-bold">ကြော်ငြာ ထည့်မည်</button>
+        </form>
+        <div id="adsListBox" class="space-y-2 max-h-56 overflow-y-auto pt-2 text-xs"></div>
+      </div>
+
+      <div class="bg-[#F3EFE6] border border-[#E5DEC9] rounded-3xl p-5 shadow-sm space-y-3">
+        <h3 class="font-bold text-sm text-[#6B141A] border-b border-[#E5DEC9] pb-2">👑 VIP Codes</h3>
+        <form onsubmit="handleCreateVipCode(event)" class="space-y-2.5 text-xs">
+          <div class="grid grid-cols-2 gap-2">
+            <input id="vipMember" type="text" required placeholder="အမည်" class="px-3 py-2 rounded-xl bg-white border border-[#E5DEC9]" />
+            <input id="vipDays" type="number" min="1" value="30" class="px-3 py-2 rounded-xl bg-white border border-[#E5DEC9]" />
+          </div>
+          <div class="flex gap-2">
+            <input id="vipCodeStr" type="text" required class="flex-1 px-3 py-2 rounded-xl bg-white border border-[#E5DEC9] font-mono font-bold uppercase" />
+            <button type="button" onclick="generateVipCode()" class="tactile-btn px-3 py-2 rounded-xl bg-stone-200 font-bold">🎲 အသစ်</button>
+          </div>
+          <button type="submit" class="tactile-btn w-full py-2.5 rounded-xl bg-amber-600 text-white font-bold">👑 ထုတ်မည်</button>
+        </form>
+        <div id="vipListBox" class="space-y-2 max-h-56 overflow-y-auto pt-2 text-xs"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ================= 1-CLICK MERGE OLD SPLIT BOOKS ================= -->
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        const btn = document.createElement('button');
+        btn.id = 'mergeSplitBooksBtn';
+        btn.innerHTML = '🔧 အပိုင်းခွဲစာအုပ်များ တစ်ဖိုင်တည်းပေါင်းမည်';
+        btn.className = 'fixed bottom-6 right-6 z-50 px-5 py-3 rounded-full bg-amber-500 text-[#0D0F14] font-bold shadow-2xl hover:scale-105 transition-transform text-sm';
+        btn.onclick = executeMergeProcess;
+        document.body.appendChild(btn);
+      }, 2000); // UI ပွင့်ပြီး ၂ စက္ကန့်အကြာတွင် ညာဘက်အောက်ထောင့်၌ ပေါ်လာပါမည်
+    });
+
+    async function executeMergeProcess() {
+      if (typeof booksData === 'undefined' || !supabaseClient) {
+        return alert('စာအုပ် Data များ ရယူနေဆဲပါ။ ခဏစောင့်ပြီးမှ ပြန်နှိပ်ပါ။');
+      }
+
+      // #parts= ပါသော အပိုင်းခွဲစာအုပ်များကို စစ်ထုတ်ခြင်း
+      const chunkedBooks = booksData.filter(b => b.pdf_url && b.pdf_url.includes('#parts='));
+      
+      if (chunkedBooks.length === 0) {
+        return alert('✅ အပိုင်းခွဲထားသော စာအုပ်အဟောင်းများ မရှိတော့ပါ။ အားလုံး Single PDF ဖြစ်နေပါပြီ!');
+      }
+
+      const confirmMsg = `အပိုင်းခွဲစာအုပ်ဟောင်း (${chunkedBooks.length}) အုပ် တွေ့ရှိပါသည်။\nဖိုင်တစ်ဖိုင်တည်း (Single PDF) အဖြစ် အလိုအလျောက် ပြောင်းလဲပြီး အသစ်ပြန်တင်မလား?`;
+      if (!confirm(confirmMsg)) return;
+
+      const btn = document.getElementById('mergeSplitBooksBtn');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+
+      let successCount = 0;
+
+      for (let i = 0; i < chunkedBooks.length; i++) {
+        const book = chunkedBooks[i];
+        try {
+          btn.innerHTML = `⏳ (${i+1}/${chunkedBooks.length}) "${book.title}" ပေါင်းနေသည်...`;
+          
+          const oldUrl = book.pdf_url;
+          const [part0Url, countStr] = oldUrl.split('#parts=');
+          const totalParts = parseInt(countStr, 10) || 1;
+          const prefix = part0Url.replace(/\.part0$/, '');
+
+          // 1. အပိုင်းများအားလုံးကို Download ဆွဲယူခြင်း
+          const buffers = [];
+          for (let p = 0; p < totalParts; p++) {
+            btn.innerHTML = `⏳ (${i+1}/${chunkedBooks.length}) အပိုင်း (${p+1}/${totalParts}) ဆွဲယူနေသည်...`;
+            const res = await fetch(`${prefix}.part${p}`);
+            if (!res.ok) throw new Error(`အပိုင်း ${p} ကို ယူ၍မရပါ`);
+            buffers.push(await res.arrayBuffer());
+          }
+
+          // 2. ဖိုင်တစ်ဖိုင်တည်း ပေါင်းခြင်း
+          btn.innerHTML = `⏳ (${i+1}/${chunkedBooks.length}) ဆာဗာသို့ ပြန်တင်နေသည်...`;
+          const mergedBlob = new Blob(buffers, { type: 'application/pdf' });
+          const fileName = `merged_${Date.now()}_${book.id}.pdf`;
+
+          // 3. GitHub သို့ ပြန်တင်ခြင်း
+          const newPdfUrl = await uploadViaGitBlobApi(mergedBlob, fileName, 'pdfs');
+
+          // 4. Supabase Database အား Update လုပ်ခြင်း
+          btn.innerHTML = `⏳ (${i+1}/${chunkedBooks.length}) Database Update လုပ်နေသည်...`;
+          await supabaseClient.from('books').update({ pdf_url: newPdfUrl }).eq('id', book.id);
+          
+          // 5. GitHub မှ အဟောင်းများ ဖျက်ခြင်း
+          try {
+            if (typeof deleteFilesFromGitHubByUrls === 'function') {
+               await deleteFilesFromGitHubByUrls([oldUrl]);
+            }
+          } catch(e) { console.log('Old file deletion skipped'); }
+          
+          successCount++;
+        } catch (err) {
+          console.error(err);
+          alert(`"${book.title}" ပြောင်းလဲခြင်း မအောင်မြင်ပါ: ${err.message}`);
+        }
+      }
+
+      btn.innerHTML = `✅ ပြီးပါပြီ (${successCount} အုပ်)`;
+      setTimeout(() => { btn.style.display = 'none'; }, 3000);
+      
+      alert(`🎉 အောင်မြင်ပါသည်။ စာအုပ်ဟောင်း (${successCount}) အုပ်ကို ဖိုင်တစ်ဖိုင်တည်း (Single PDF) သို့ အလိုအလျောက် ပြောင်းလဲပြီးပါပြီ!\n\nယခု User App သို့ သွား၍ စာအုပ်ကို ပြန်ဖွင့်ကြည့်ပါ။ Loading ချက်ချင်းပွင့်သွားပါမည်။`);
+      
+      // စာအုပ်စာရင်း အသစ်ပြန်ခေါ်ရန်
+      if (typeof loadAllAdminData === 'function') loadAllAdminData();
+    }
+  </script>
+
+  <script>
+    // ================= SECURITY PIN SYSTEM =================
+    const DEFAULT_ADMIN_PIN = '2026';
+
+    function getActiveAdminPin() {
+      return localStorage.getItem('CUSTOM_ADMIN_PIN') || DEFAULT_ADMIN_PIN;
+    }
+
+    function changeAdminPinPrompt() {
+      const current = prompt('လက်ရှိ PIN Code ရိုက်ထည့်ပါ:');
+      if (current === null) return;
+      if (current !== getActiveAdminPin()) {
+        alert('❌ လက်ရှိ PIN Code မှားယွင်းနေပါသည်။');
+        return;
+      }
+      const nextPin = prompt('ပြောင်းလဲလိုသော PIN Code အသစ် ရိုက်ထည့်ပါ (အနည်းဆုံး ၄ လုံး):');
+      if (nextPin && nextPin.trim().length >= 4) {
+        localStorage.setItem('CUSTOM_ADMIN_PIN', nextPin.trim());
+        alert('✅ PIN Code အသစ် ပြောင်းလဲပြီးပါပြီ!');
+      } else if (nextPin !== null) {
+        alert('⚠️ PIN Code သည် အနည်းဆုံး ၄ လုံး ရှိရပါမည်။');
+      }
+    }
+
+    function checkAdminAuth() {
+      const isAuth = sessionStorage.getItem('admin_authenticated');
+      const lockScreen = document.getElementById('adminLockScreen');
+      if (isAuth === 'true') {
+        lockScreen.style.opacity = '0';
+        setTimeout(() => lockScreen.style.display = 'none', 300);
+        initAdminApp();
+      } else {
+        lockScreen.style.display = 'flex';
+        lockScreen.style.opacity = '1';
+        document.getElementById('loginPinInput').focus();
+      }
+    }
+
+    function verifyAdminPin(e) {
+      e.preventDefault();
+      const input = document.getElementById('loginPinInput').value;
+      const errorMsg = document.getElementById('loginErrorMsg');
+      if (input === getActiveAdminPin()) {
+        sessionStorage.setItem('admin_authenticated', 'true');
+        errorMsg.classList.add('hidden');
+        checkAdminAuth();
+      } else {
+        errorMsg.classList.remove('hidden');
+        document.getElementById('loginPinInput').value = '';
+        document.getElementById('loginPinInput').focus();
+      }
+    }
+
+    function adminLogout() {
+      sessionStorage.removeItem('admin_authenticated');
+      window.location.reload();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      checkAdminAuth();
+    });
+
+    // ================= MAIN APP LOGIC =================
+    const DEFAULT_SUPABASE_URL = 'https://ksgxlvrojzawvkkvsbyi.supabase.co';
+    const DEFAULT_SUPABASE_KEY = 'sb_publishable_BcZTWsRcRYEJ_dtSAg1VnA_VWNE9FSg';
+    const JSDELIVR_MAX_BYTES = 19 * 1024 * 1024;
+
+    let supabaseClient = null;
+    let categoriesData = [];
+    let booksData = [];
+    let adsData = [];
+    let selectedPdfFile = null;
+    let selectedCoverBlob = null;
+
+    function initAdminApp() {
+      if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      generateVipCode();
+      updateHeaderBadgeUI();
+      const cfg = getStorageConfig();
+      if (cfg.sbUrl && cfg.sbKey) {
+        supabaseClient = window.supabase.createClient(cfg.sbUrl.trim(), cfg.sbKey.trim());
+        loadAllAdminData();
+      }
+    }
+
+    function findAnySavedGitHubToken() {
+      const direct = localStorage.getItem('GH_TOKEN') || localStorage.getItem('GITHUB_TOKEN') || localStorage.getItem('PAT') || '';
+      if (direct) return direct.trim();
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        const val = localStorage.getItem(k) || '';
+        if (val.startsWith('ghp_') || val.startsWith('github_pat_')) return val.trim();
+      }
+      return '';
+    }
+
+    function getStorageConfig() {
+      return {
+        ghToken: findAnySavedGitHubToken(),
+        ghOwner: localStorage.getItem('GH_OWNER') || 'waiyanoocreative-ops',
+        ghRepo: localStorage.getItem('GH_REPO') || 'myBooks',
+        ghBranch: localStorage.getItem('GH_BRANCH') || 'main',
+        sbUrl: localStorage.getItem('SB_URL') || DEFAULT_SUPABASE_URL,
+        sbKey: localStorage.getItem('SB_KEY') || DEFAULT_SUPABASE_KEY
+      };
+    }
+
+    // ================= JSDELIVR CDN URL CONVERTER =================
+    function toJsDelivrUrlIfEligible(rawOrCdnUrl) {
+      if (!rawOrCdnUrl || rawOrCdnUrl.includes('#parts=')) return rawOrCdnUrl;
+      const m = rawOrCdnUrl.match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/);
+      if (!m) return rawOrCdnUrl;
+      return `https://cdn.jsdelivr.net/gh/${m[1]}/${m[2]}@${m[3]}/${m[4]}`;
+    }
+
+    async function upgradeExistingCoversToCdn() {
+      if (!supabaseClient || !booksData.length) return;
+      const btn = document.getElementById('cdnUpgradeBtn');
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '⏳ CDN သို့ ပြောင်းနေသည်...';
+
+      let updatedCount = 0;
+      try {
+        for (const b of booksData) {
+          if (b.cover_url && b.cover_url.includes('raw.githubusercontent.com')) {
+            const newCover = toJsDelivrUrlIfEligible(b.cover_url);
+            await supabaseClient.from('books').update({ cover_url: newCover }).eq('id', b.id);
+            updatedCount++;
+          }
+        }
+        for (const a of adsData) {
+          if (a.image_url && a.image_url.includes('raw.githubusercontent.com')) {
+            const newImg = toJsDelivrUrlIfEligible(a.image_url);
+            await supabaseClient.from('ads').update({ image_url: newImg }).eq('id', a.id);
+            updatedCount++;
+          }
+        }
+        await loadAllAdminData();
+        alert(updatedCount > 0
+          ? `✅ မျက်နှာဖုံးပုံနှင့် ကြော်ငြာပုံ (${updatedCount}) ခုကို ၃ ဆ ပိုမြန်သော jsDelivr CDN သို့ ပြောင်းလဲပြီးပါပြီ!`
+          : '✅ လက်ရှိ မျက်နှာဖုံးပုံအားလုံးသည် jsDelivr CDN စနစ် ဖြစ်နေပြီးသား ဖြစ်ပါသည်။');
+      } catch (err) {
+        alert('CDN ပြောင်းလဲရာတွင် အမှားရှိပါသည်: ' + (err.message || err));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    }
+
+    // ================= AUTO FILE CLEANUP ENGINE (DELETES FILES FROM GITHUB) =================
+    function parseGitHubFileUrl(url) {
+      if (!url) return null;
+      const [cleanUrl, hashPart] = url.split('#parts=');
+      const totalParts = hashPart ? parseInt(hashPart, 10) || 1 : 1;
+
+      let owner, repo, branch, path;
+      const rawMatch = cleanUrl.match(/^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)$/);
+      const cdnMatch = cleanUrl.match(/^https:\/\/cdn\.jsdelivr\.net\/gh\/([^/]+)\/([^/@]+)@([^/]+)\/(.+)$/);
+
+      if (rawMatch) {
+        [, owner, repo, branch, path] = rawMatch;
+      } else if (cdnMatch) {
+        [, owner, repo, branch, path] = cdnMatch;
+      } else {
+        return null;
+      }
+
+      const decodedPath = decodeURIComponent(path);
+      const paths = [];
+      if (totalParts > 1 && decodedPath.endsWith('.part0')) {
+        const prefix = decodedPath.replace(/\.part0$/, '');
+        for (let i = 0; i < totalParts; i++) paths.push(`${prefix}.part${i}`);
+      } else {
+        paths.push(decodedPath);
+      }
+      return { owner, repo, branch, paths };
+    }
+
+    async function deleteFilesFromGitHubByUrls(urlsArray) {
+      const cfg = getStorageConfig();
+      if (!cfg.ghToken) return;
+
+      const groups = {};
+      for (const u of urlsArray) {
+        const parsed = parseGitHubFileUrl(u);
+        if (!parsed) continue;
+        const key = `${parsed.owner}/${parsed.repo}@${parsed.branch}`;
+        if (!groups[key]) groups[key] = { ...parsed, paths: [] };
+        groups[key].paths.push(...parsed.paths);
+      }
+
+      const headers = {
+        'Authorization': `Bearer ${cfg.ghToken}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json'
+      };
+
+      for (const group of Object.values(groups)) {
+        const baseUrl = `https://api.github.com/repos/${group.owner}/${group.repo}`;
+        for (const filePath of group.paths) {
+          try {
+            const refRes = await fetch(`${baseUrl}/git/ref/heads/${group.branch}`, { headers });
+            if (!refRes.ok) continue;
+            const refData = await refRes.json();
+            const latestCommitSha = refData.object.sha;
+
+            const commitRes = await fetch(`${baseUrl}/git/commits/${latestCommitSha}`, { headers });
+            if (!commitRes.ok) continue;
+            const commitData = await commitRes.json();
+            const baseTreeSha = commitData.tree.sha;
+
+            const treeRes = await fetch(`${baseUrl}/git/trees`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                base_tree: baseTreeSha,
+                tree: [{ path: filePath, mode: '100644', type: 'blob', sha: null }]
+              })
+            });
+            if (!treeRes.ok) continue;
+            const treeData = await treeRes.json();
+
+            const newCommitRes = await fetch(`${baseUrl}/git/commits`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                message: `Delete ${filePath} via Sar Admin Auto-Cleanup`,
+                tree: treeData.sha,
+                parents: [latestCommitSha]
+              })
+            });
+            if (!newCommitRes.ok) continue;
+            const newCommitData = await newCommitRes.json();
+
+            await fetch(`${baseUrl}/git/refs/heads/${group.branch}`, {
+              method: 'PATCH',
+              headers,
+              body: JSON.stringify({ sha: newCommitData.sha, force: true })
+            });
+          } catch (e) {}
+        }
+      }
+    }
+
+    async function updateHeaderBadgeUI() {
+      const badge = document.getElementById('storageBadgePill');
+      if (!badge) return;
+      const cfg = getStorageConfig();
+      if (!cfg.ghToken) {
+        badge.className = 'px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-600/40 text-[10px] font-bold text-amber-900 cursor-pointer animate-pulse';
+        badge.textContent = '⚠️ Token ထည့်ပါ';
+        return;
+      }
+      badge.className = 'px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-600/30 text-[10px] font-bold text-emerald-800 cursor-pointer';
+      badge.textContent = `🐙 ${cfg.ghRepo} (စစ်ဆေးနေသည်...)`;
+      try {
+        const res = await fetch(`https://api.github.com/repos/${cfg.ghOwner}/${cfg.ghRepo}`, {
+          headers: { 'Authorization': `Bearer ${cfg.ghToken}`, 'Accept': 'application/vnd.github+json' }
+        });
+        if (!res.ok) throw new Error('Repo error');
+        const repoData = await res.json();
+        const usedMb = (repoData.size / 1024).toFixed(1);
+        const usedGb = (repoData.size / (1024 * 1024)).toFixed(2);
+        const usedPct = Math.min(Math.round((usedMb / 4500) * 100), 100);
+        if (usedMb >= 4000) {
+          badge.className = 'px-2.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold cursor-pointer animate-bounce';
+          badge.textContent = `🚨 ${cfg.ghRepo} (${usedGb} GB / 4.5 GB)`;
+        } else if (usedMb >= 3000) {
+          badge.className = 'px-2.5 py-0.5 rounded-full bg-amber-500/25 border border-amber-600 text-[10px] font-bold text-amber-900 cursor-pointer';
+          badge.textContent = `⚠️ ${cfg.ghRepo}: ${usedGb} GB / 4.5 GB`;
+        } else {
+          badge.textContent = `🐙 ${cfg.ghRepo}: ${usedMb >= 1000 ? usedGb + ' GB' : usedMb + ' MB'} (${usedPct}%)`;
+        }
+      } catch (e) {
+        badge.textContent = `🐙 ${cfg.ghRepo} Connected`;
+      }
+    }
+
+    function openConfigModal() {
+      const cfg = getStorageConfig();
+      document.getElementById('cfgGhToken').value = cfg.ghToken;
+      document.getElementById('cfgGhOwner').value = cfg.ghOwner;
+      document.getElementById('cfgGhRepo').value = cfg.ghRepo;
+      document.getElementById('cfgGhBranch').value = cfg.ghBranch;
+      document.getElementById('cfgSbUrl').value = cfg.sbUrl;
+      document.getElementById('cfgSbKey').value = cfg.sbKey;
+      document.getElementById('configModal').style.display = 'flex';
+    }
+    function closeConfigModal() { document.getElementById('configModal').style.display = 'none'; }
+
+    async function saveConfigSettings(e) {
+      e.preventDefault();
+      const t = document.getElementById('cfgGhToken').value.trim();
+      if (t) { localStorage.setItem('GH_TOKEN', t); localStorage.setItem('GITHUB_TOKEN', t); }
+      else { localStorage.removeItem('GH_TOKEN'); localStorage.removeItem('GITHUB_TOKEN'); }
+      localStorage.setItem('GH_OWNER', document.getElementById('cfgGhOwner').value.trim() || 'waiyanoocreative-ops');
+      localStorage.setItem('GH_REPO', document.getElementById('cfgGhRepo').value.trim() || 'myBooks');
+      localStorage.setItem('GH_BRANCH', document.getElementById('cfgGhBranch').value.trim() || 'main');
+      localStorage.setItem('SB_URL', document.getElementById('cfgSbUrl').value.trim() || DEFAULT_SUPABASE_URL);
+      localStorage.setItem('SB_KEY', document.getElementById('cfgSbKey').value.trim() || DEFAULT_SUPABASE_KEY);
+      closeConfigModal();
+      updateHeaderBadgeUI();
+      supabaseClient = window.supabase.createClient(localStorage.getItem('SB_URL'), localStorage.getItem('SB_KEY'));
+      await loadAllAdminData();
+    }
+
+    async function loadAllAdminData() {
+      if (!supabaseClient) return;
+      const [catRes, bookRes, reqRes, revRes, adRes, vipRes] = await Promise.all([
+        supabaseClient.from('categories').select('*').order('name'),
+        supabaseClient.from('books').select('*, categories(name)').order('created_at', { ascending: false }),
+        supabaseClient.from('book_requests').select('*').order('upvotes', { ascending: false }),
+        supabaseClient.from('book_reviews').select('*').order('created_at', { ascending: false }),
+        supabaseClient.from('ads').select('*').order('created_at', { ascending: false }),
+        supabaseClient.from('vip_codes').select('*').order('created_at', { ascending: false })
+      ]);
+      categoriesData = catRes.data || [];
+      booksData = bookRes.data || [];
+      adsData = adRes.data || [];
+      renderCategoriesUI();
+      renderBooksList();
+      renderRequestsUI(reqRes.data || []);
+      renderReviewsUI(revRes.data || []);
+      renderAdsUI(adsData);
+      renderVipUI(vipRes.data || []);
+    }
+
+    // ================= GIT DATA BLOB API ENGINE =================
+    function blobToBase64Content(fileOrBlob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || '');
+          resolve(result.includes(',') ? result.split(',')[1] : result);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(fileOrBlob);
+      });
+    }
+
+    async function uploadViaGitBlobApi(fileOrBlob, fileName, folder = 'books', onProgress = null) {
+      const cfg = getStorageConfig();
+      if (!cfg.ghToken) throw new Error('Token အရင်ထည့်ပေးပါ။');
+
+      const cleanName = `${Date.now()}_${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const path = `${folder}/${cleanName}`;
+
+      if (onProgress) onProgress(10);
+      const base64Content = await blobToBase64Content(fileOrBlob);
+
+      const headers = {
+        'Authorization': `Bearer ${cfg.ghToken}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json'
+      };
+      const baseUrl = `https://api.github.com/repos/${cfg.ghOwner}/${cfg.ghRepo}`;
+
+      if (onProgress) onProgress(20);
+
+      const refRes = await fetch(`${baseUrl}/git/ref/heads/${cfg.ghBranch}`, { headers });
+      if (!refRes.ok) throw new Error('Branch ရှာမတွေ့ပါ။ Repo အမည် မှန်/မမှန် စစ်ပါ။');
+      const refData = await refRes.json();
+      const latestCommitSha = refData.object.sha;
+
+      if (onProgress) onProgress(30);
+
+      const commitRes = await fetch(`${baseUrl}/git/commits/${latestCommitSha}`, { headers });
+      if (!commitRes.ok) throw new Error('Commit SHA ဆွဲယူ၍ မရပါ။');
+      const commitData = await commitRes.json();
+      const baseTreeSha = commitData.tree.sha;
+
+      if (onProgress) onProgress(40);
+
+      const blobRes = await fetch(`${baseUrl}/git/blobs`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ content: base64Content, encoding: 'base64' })
+      });
+      if (!blobRes.ok) throw new Error('ဖိုင်တင်ခြင်း မအောင်မြင်ပါ။ (ဖိုင်ဆိုဒ် ကြီးလွန်းခြင်း သို့မဟုတ် အင်တာနက် ပြတ်သွားခြင်း)');
+      const blobData = await blobRes.json();
+
+      if (onProgress) onProgress(75);
+
+      const treeRes = await fetch(`${baseUrl}/git/trees`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ base_tree: baseTreeSha, tree: [{ path, mode: '100644', type: 'blob', sha: blobData.sha }] })
+      });
+      if (!treeRes.ok) throw new Error('Tree ဖန်တီးမှု ကျရှုံးပါသည်။');
+      const treeData = await treeRes.json();
+
+      if (onProgress) onProgress(85);
+
+      const newCommitRes = await fetch(`${baseUrl}/git/commits`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ message: `Upload ${cleanName} via Sar Admin (Git Blob)`, tree: treeData.sha, parents: [latestCommitSha] })
+      });
+      if (!newCommitRes.ok) throw new Error('Commit ဖန်တီးမှု ကျရှုံးပါသည်။');
+      const newCommitData = await newCommitRes.json();
+
+      if (onProgress) onProgress(95);
+
+      const updateRefRes = await fetch(`${baseUrl}/git/refs/heads/${cfg.ghBranch}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ sha: newCommitData.sha, force: true })
+      });
+      if (!updateRefRes.ok) {
+        const errData = await updateRefRes.json().catch(() => ({}));
+        throw new Error(`Branch Update မအောင်မြင်ပါ။ (GitHub ပိုင်းလွဲချော်မှု - ${errData.message || updateRefRes.status})`);
+      }
+
+      if (onProgress) onProgress(100);
+
+      if (fileOrBlob.size <= JSDELIVR_MAX_BYTES) {
+        return `https://cdn.jsdelivr.net/gh/${cfg.ghOwner}/${cfg.ghRepo}@${cfg.ghBranch}/${path}`;
+      }
+      return `https://raw.githubusercontent.com/${cfg.ghOwner}/${cfg.ghRepo}/${cfg.ghBranch}/${path}`;
+    }
+
+    async function onPdfSelected(e) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      selectedPdfFile = file;
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      const cdnLabel = file.size <= JSDELIVR_MAX_BYTES ? '⚡ CDN' : '🐙 Raw';
+      document.getElementById('pdfFileNameLabel').textContent = `${file.name} (${sizeMb} MB - ဖတ်နေသည်...)`;
+      const titleInput = document.getElementById('bookTitle');
+      if (!titleInput.value.trim()) titleInput.value = file.name.replace(/\.pdf$/i, '');
+      const tempBlobUrl = URL.createObjectURL(file);
+      try {
+        const pdf = await pdfjsLib.getDocument(tempBlobUrl).promise;
+        document.getElementById('bookPages').value = pdf.numPages;
+        document.getElementById('pdfFileNameLabel').textContent = `✅ ${file.name} (${pdf.numPages} မျက်နှာ • ${sizeMb} MB • ${cdnLabel})`;
+        if (!document.getElementById('coverFileInput').files?.[0]) {
+          const page = await pdf.getPage(1);
+          const vp = page.getViewport({ scale: 1.2 });
+          const canvas = document.createElement('canvas');
+          canvas.width = vp.width;
+          canvas.height = vp.height;
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+          document.getElementById('coverPreviewBox').innerHTML = `<img src="${canvas.toDataURL('image/jpeg', 0.85)}" class="w-full h-full object-cover" />`;
+          selectedCoverBlob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
+        }
+      } catch (err) {
+        document.getElementById('pdfFileNameLabel').textContent = `✅ ${file.name} (${sizeMb} MB • ${cdnLabel})`;
+      } finally {
+        URL.revokeObjectURL(tempBlobUrl);
+      }
+    }
+
+    function onCoverSelected(e) {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      selectedCoverBlob = file;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        document.getElementById('coverPreviewBox').innerHTML = `<img src="${ev.target.result}" class="w-full h-full object-cover" />`;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function saveBookToSupabaseSafe(payload, editId) {
+      if (editId) {
+        const { error } = await supabaseClient.from('books').update(payload).eq('id', editId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabaseClient.from('books').insert([payload]);
+        if (error) throw error;
+      }
+    }
+
+    async function handleBookSubmit(e) {
+      e.preventDefault();
+      const editId = document.getElementById('editingBookId').value.trim();
+      let pdfUrl = document.getElementById('existingPdfUrl').value.trim();
+      let coverUrl = document.getElementById('existingCoverUrl').value.trim();
+
+      if (!editId && !selectedPdfFile && !pdfUrl) { alert('PDF စာအုပ်ဖိုင် ရွေးချယ်ပေးပါ။'); return; }
+      if ((selectedPdfFile || selectedCoverBlob) && !findAnySavedGitHubToken()) { openConfigModal(); alert('GitHub Token အရင်ထည့်သွင်းပေးပါ။'); return; }
+
+      const statusBox = document.getElementById('uploadStatusBox');
+      const stepText = document.getElementById('uploadStepText');
+      const pctText = document.getElementById('uploadPctText');
+      const bar = document.getElementById('uploadProgressBar');
+      const btn = document.getElementById('submitBookBtn');
+
+      try {
+        btn.disabled = true;
+        statusBox.classList.remove('hidden');
+
+        if (selectedPdfFile) {
+          stepText.textContent = '🐙 PDF ဖိုင်ကို Git Blob စနစ်ဖြင့် တိုက်ရိုက်တင်နေပါသည်...';
+          pdfUrl = await uploadViaGitBlobApi(selectedPdfFile, selectedPdfFile.name, 'pdfs', (pct) => {
+            pctText.textContent = `${pct}%`;
+            bar.style.width = `${pct}%`;
+            if (pct === 40) stepText.textContent = '📦 ဖိုင်ဒေတာများကို ပို့လွှတ်နေပါသည် (ခေတ္တစောင့်ပါ)...';
+            if (pct === 75) stepText.textContent = '✅ ဖိုင်ရောက်ရှိသွားပါပြီ။ Commit တည်ဆောက်နေပါသည်...';
+          });
+        }
+
+        if (selectedCoverBlob) {
+          stepText.textContent = '🖼️ မျက်နှာဖုံးပုံကို jsDelivr CDN သို့ တင်နေပါသည်...';
+          coverUrl = await uploadViaGitBlobApi(selectedCoverBlob, selectedCoverBlob.name || 'cover.jpg', 'covers', (pct) => {
+            pctText.textContent = `${pct}%`;
+            bar.style.width = `${pct}%`;
+          });
+        }
+
+        stepText.textContent = '💾 စာအုပ်စာရင်းကို သိမ်းဆည်းနေပါသည်...';
+        pctText.textContent = '100%';
+        bar.style.width = '100%';
+        const basePayload = {
+          title: document.getElementById('bookTitle').value.trim(),
+          author: document.getElementById('bookAuthor').value.trim(),
+          category_id: document.getElementById('bookCategory').value || null,
+          page_count: parseInt(document.getElementById('bookPages').value || '1', 10),
+          status: document.getElementById('bookStatus').value,
+          cover_url: coverUrl || null,
+          pdf_url: pdfUrl,
+          description: document.getElementById('bookDesc').value.trim() || null
+        };
+        try {
+          await saveBookToSupabaseSafe({ ...basePayload, pdf_path: pdfUrl, cover_path: coverUrl || '' }, editId);
+        } catch (colErr) {
+          await saveBookToSupabaseSafe(basePayload, editId);
+        }
+
+        resetBookForm();
+        updateHeaderBadgeUI();
+        await loadAllAdminData();
+      } catch (err) {
+        alert(err.message || err);
+      } finally {
+        btn.disabled = false;
+        statusBox.classList.add('hidden');
+      }
+    }
+
+    function editBook(id) {
+      const b = booksData.find((x) => String(x.id) === String(id));
+      if (!b) return;
+      selectedPdfFile = null;
+      selectedCoverBlob = null;
+      document.getElementById('editingBookId').value = b.id;
+      document.getElementById('existingPdfUrl').value = b.pdf_url || '';
+      document.getElementById('existingCoverUrl').value = b.cover_url || '';
+      document.getElementById('bookTitle').value = b.title || '';
+      document.getElementById('bookAuthor').value = b.author || '';
+      document.getElementById('bookCategory').value = b.category_id || '';
+      document.getElementById('bookPages').value = b.page_count || 1;
+      document.getElementById('bookStatus').value = b.status || 'published';
+      document.getElementById('bookDesc').value = b.description || '';
+      document.getElementById('pdfFileNameLabel').textContent = 'လက်ရှိ PDF ဖိုင် ရှိပြီးသားဖြစ်သည်';
+      document.getElementById('coverPreviewBox').innerHTML = b.cover_url ? `<img src="${b.cover_url}" class="w-full h-full object-cover" />` : 'Cover';
+      document.getElementById('formHeading').textContent = '✏️ စာအုပ် ပြင်ဆင်ရန်';
+      document.getElementById('submitBookBtn').textContent = '💾 ပြင်ဆင်ချက် သိမ်းမည်';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    function resetBookForm() {
+      document.getElementById('bookUploadForm').reset();
+      selectedPdfFile = null;
+      selectedCoverBlob = null;
+      document.getElementById('editingBookId').value = '';
+      document.getElementById('existingPdfUrl').value = '';
+      document.getElementById('existingCoverUrl').value = '';
+      document.getElementById('pdfFileNameLabel').textContent = 'ဖိုင်ရွေးချယ်ထားခြင်း မရှိသေးပါ';
+      document.getElementById('coverPreviewBox').innerHTML = 'Cover';
+      document.getElementById('formHeading').textContent = '📤 စာအုပ်အသစ် တင်ရန် (Git Blob + jsDelivr CDN)';
+      document.getElementById('submitBookBtn').textContent = '💾 စာအုပ် တင်မည်';
+    }
+
+    // ================= AUTO GITHUB CLEANUP ON BOOK DELETE =================
+    async function deleteBook(id, btnEl = null) {
+      const b = booksData.find((x) => String(x.id) === String(id));
+      if (!confirm(`"${b ? b.title : 'ဤစာအုပ်'}" ကို ဖျက်မည်မှာ သေချာပါသလား?\n(GitHub ပေါ်ရှိ မူရင်း PDF နှင့် မျက်နှာဖုံးပုံကိုပါ တစ်ပါတည်း ဖျက်ပေးပါမည်)`)) return;
+
+      if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.textContent = '⏳ ဖျက်နေသည်...';
+      }
+
+      try {
+        if (b) {
+          const urlsToDelete = [b.pdf_url, b.cover_url].filter(Boolean);
+          await deleteFilesFromGitHubByUrls(urlsToDelete);
+        }
+        await supabaseClient.from('books').delete().eq('id', id);
+        updateHeaderBadgeUI();
+        await loadAllAdminData();
+      } catch (err) {
+        alert('ဖျက်ရာတွင် အမှားရှိပါသည်: ' + (err.message || err));
+      }
+    }
+
+    function renderBooksList() {
+      const box = document.getElementById('booksListBox');
+      const q = (document.getElementById('searchBooksInput')?.value || '').trim().toLowerCase();
+      const filtered = q ? booksData.filter((b) => (b.title || '').toLowerCase().includes(q) || (b.author || '').toLowerCase().includes(q)) : booksData;
+      document.getElementById('booksCountLabel').textContent = filtered.length;
+      if (filtered.length === 0) {
+        box.innerHTML = `<p class="text-xs text-[#786E65] py-6 text-center col-span-2">စာအုပ် မရှိသေးပါ။</p>`;
+        return;
+      }
+      box.innerHTML = filtered.map((b) => {
+        const isCdn = (b.cover_url || '').includes('jsdelivr') || (b.pdf_url || '').includes('jsdelivr');
+        const isGh = (b.pdf_url || '').includes('github') || isCdn;
+        return `
+          <div class="bg-white border border-[#E5DEC9] rounded-2xl p-3 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-11 h-16 rounded bg-[#E5DEC9] overflow-hidden shrink-0">${b.cover_url ? `<img src="${b.cover_url}" class="w-full h-full object-cover" />` : ''}</div>
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-[10px] font-bold text-[#6B141A]">${b.categories?.name || 'အထွေထွေ'} • 👁 ${b.read_count || 0}</span>
+                  <span class="px-1.5 py-0.2 rounded ${isCdn ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-600'} text-[9px] font-bold">${isCdn ? '⚡ jsDelivr CDN' : (isGh ? '🐙 GitHub Raw' : '⚡ Supabase')}</span>
+                </div>
+                <h4 class="font-bold text-xs truncate">${b.title}</h4><p class="text-[11px] text-[#786E65] truncate">✍️ ${b.author} (${b.page_count || 1} မျက်နှာ)</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0 text-xs">
+              <button type="button" onclick="editBook('${b.id}')" class="tactile-btn px-2.5 py-1.5 rounded-xl bg-amber-100 text-amber-900 font-bold">ပြင်မည်</button>
+              <button type="button" onclick="deleteBook('${b.id}', this)" class="tactile-btn px-2.5 py-1.5 rounded-xl bg-red-100 text-red-700 font-bold">ဖျက်မည်</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderCategoriesUI() {
+      const sel = document.getElementById('bookCategory');
+      sel.innerHTML = `<option value="">-- အမျိုးအစား ရွေးပါ --</option>` + categoriesData.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+      document.getElementById('categoriesListBox').innerHTML = categoriesData.map((c) => `<div class="flex items-center justify-between bg-white px-3 py-1.5 rounded-xl border border-[#E5DEC9]"><span class="font-bold">${c.name}</span><button type="button" onclick="deleteCategory('${c.id}')" class="text-red-600 font-bold text-[11px]">✕</button></div>`).join('');
+    }
+    async function handleAddCategory(e) { e.preventDefault(); const name = document.getElementById('newCatInput').value.trim(); if (!name) return; await supabaseClient.from('categories').insert([{ name }]); document.getElementById('newCatInput').value = ''; await loadAllAdminData(); }
+    async function deleteCategory(id) { if (!confirm('ဤအမျိုးအစားကို ဖျက်မည်လား?')) return; await supabaseClient.from('categories').delete().eq('id', id); await loadAllAdminData(); }
+
+    function renderRequestsUI(list) {
+      if (!list.length) { document.getElementById('requestsListBox').innerHTML = `<p class="text-[#786E65] text-center py-4">တောင်းဆိုထားသော စာအုပ် မရှိသေးပါ။</p>`; return; }
+      document.getElementById('requestsListBox').innerHTML = list.map((r) => `<div class="bg-white p-2.5 rounded-xl border border-[#E5DEC9] flex items-center justify-between gap-2"><div class="min-w-0"><p class="font-bold truncate">${r.book_title} <span class="text-amber-700">(👍 ${r.upvotes || 1})</span></p><p class="text-[11px] text-[#786E65] truncate">✍️ ${r.author_name || ''}</p></div><div class="flex items-center gap-1 shrink-0"><button type="button" onclick="markRequestDone('${r.id}', '${r.status === 'uploaded' ? 'pending' : 'uploaded'}')" class="px-2 py-1 rounded-lg ${r.status === 'uploaded' ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-200 text-stone-800'} font-bold text-[10px]">${r.status === 'uploaded' ? '✅ တင်ပြီး' : 'မှတ်မည်'}</button><button type="button" onclick="deleteRequest('${r.id}')" class="px-2 py-1 rounded-lg bg-red-100 text-red-700 font-bold text-[10px]">✕</button></div></div>`).join('');
+    }
+    async function markRequestDone(id, status) { await supabaseClient.from('book_requests').update({ status }).eq('id', id); await loadAllAdminData(); }
+    async function deleteRequest(id) { await supabaseClient.from('book_requests').delete().eq('id', id); await loadAllAdminData(); }
+
+    function renderReviewsUI(list) {
+      document.getElementById('reviewsCountBadge').textContent = `${list.length} မှတ်ချက်`;
+      if (!list.length) { document.getElementById('reviewsListBox').innerHTML = `<p class="text-[#786E65] text-center py-4 col-span-2">စာဖတ်သူ မှတ်ချက် မရှိသေးပါ။</p>`; return; }
+      document.getElementById('reviewsListBox').innerHTML = list.map((r) => { const b = booksData.find((x) => String(x.id) === String(r.book_id)); return `<div class="bg-white p-3 rounded-xl border border-[#E5DEC9] flex items-start justify-between gap-2"><div class="min-w-0 space-y-0.5"><div class="flex items-center gap-1.5"><span class="font-bold">${r.user_name || 'စာဖတ်သူ'}</span><span class="text-amber-500 text-[10px]">${'⭐'.repeat(Math.min(Math.max(Number(r.rating) || 5, 1), 5))}</span><span class="text-[10px] text-[#6B141A] font-bold truncate">• ${b ? b.title : ''}</span></div><p class="text-[#1E1916] leading-snug">${r.comment}</p></div><button type="button" onclick="deleteReview('${r.id}')" class="px-2 py-1 rounded-lg bg-red-100 text-red-700 font-bold text-[10px] shrink-0">ဖျက်မည်</button></div>`; }).join('');
+    }
+    async function deleteReview(id) { await supabaseClient.from('book_reviews').delete().eq('id', id); await loadAllAdminData(); }
+
+    async function handleAddSponsorAd(e) {
+      e.preventDefault();
+      const file = document.getElementById('adImageFile').files?.[0];
+      if (!file) { alert('ကြော်ငြာပုံ ရွေးချယ်ပေးပါ။'); return; }
+      const btn = document.getElementById('adSubmitBtn');
+      try {
+        btn.disabled = true;
+        btn.textContent = 'CDN သို့ တင်နေပါသည်...';
+        const imageUrl = await uploadViaGitBlobApi(file, file.name, 'ads');
+        await supabaseClient.from('ads').insert([{ title: document.getElementById('adTitle').value.trim(), image_url: imageUrl, target_url: document.getElementById('adTargetUrl').value.trim(), is_active: true, clicks: 0 }]);
+        e.target.reset();
+        updateHeaderBadgeUI();
+        await loadAllAdminData();
+      } catch (err) { alert(err.message || err); } finally { btn.disabled = false; btn.textContent = 'ကြော်ငြာ ထည့်မည်'; }
+    }
+    function renderAdsUI(list) { document.getElementById('adsListBox').innerHTML = list.map((a) => `<div class="bg-white p-2.5 rounded-xl border border-[#E5DEC9] flex items-center justify-between gap-2"><div class="flex items-center gap-2 min-w-0"><img src="${a.image_url}" class="w-14 aspect-video rounded object-cover shrink-0" /><div class="min-w-0"><p class="font-bold truncate">${a.title}</p><p class="text-[10px] text-[#786E65]">👆 ${a.clicks || 0} Clicks</p></div></div><button type="button" onclick="deleteAd('${a.id}', this)" class="px-2.5 py-1 rounded-lg bg-red-100 text-red-700 font-bold text-[11px]">ဖျက်မည်</button></div>`).join(''); }
+
+    async function deleteAd(id, btnEl = null) {
+      const a = adsData.find((x) => String(x.id) === String(id));
+      if (!confirm('ဤကြော်ငြာကို ဖျက်မည်လား?')) return;
+      if (btnEl) { btnEl.disabled = true; btnEl.textContent = '...'; }
+      if (a && a.image_url) await deleteFilesFromGitHubByUrls([a.image_url]);
+      await supabaseClient.from('ads').delete().eq('id', id);
+      updateHeaderBadgeUI();
+      await loadAllAdminData();
+    }
+
+    function generateVipCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = 'SAR-';
+      for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+      document.getElementById('vipCodeStr').value = code;
+    }
+    async function handleCreateVipCode(e) {
+      e.preventDefault();
+      await supabaseClient.from('vip_codes').insert([{ code: document.getElementById('vipCodeStr').value.trim().toUpperCase(), member_name: document.getElementById('vipMember').value.trim(), plan_name: 'VIP Member', duration_days: parseInt(document.getElementById('vipDays').value || '30', 10), is_active: true }]);
+      document.getElementById('vipMember').value = '';
+      generateVipCode();
+      await loadAllAdminData();
+    }
+    function renderVipUI(list) { document.getElementById('vipListBox').innerHTML = list.map((v) => `<div class="bg-white p-2.5 rounded-xl border border-[#E5DEC9] flex items-center justify-between gap-2"><div><span class="font-mono font-bold text-[#6B141A]">${v.code}</span><span class="text-[11px] text-[#786E65] ml-1">(${v.member_name} • ${v.duration_days} ရက်)</span></div><button type="button" onclick="deleteVip('${v.id}')" class="px-2 py-1 rounded-lg bg-red-100 text-red-700 font-bold text-[10px]">✕</button></div>`).join(''); }
+    async function deleteVip(id) { await supabaseClient.from('vip_codes').delete().eq('id', id); await loadAllAdminData(); }
+  </script>
+</body>
+</html>
